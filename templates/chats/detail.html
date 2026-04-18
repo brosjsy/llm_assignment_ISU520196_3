@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}{{ chat.title }} — WAD Chat{% endblock %}
+{% block body %}
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <a href="/chats" class="logo">💬 WAD Chat</a>
+      <button class="btn btn-sm btn-primary" onclick="createChat()">+ New</button>
+    </div>
+    <nav class="chat-list">
+      {% for c in chats %}
+      <a href="/chats/{{ c.id }}" class="chat-item {% if c.id == chat.id %}active{% endif %}">
+        <span class="chat-title">{{ c.title }}</span>
+        <button class="delete-btn" onclick="deleteChat(event, {{ c.id }})">✕</button>
+      </a>
+      {% endfor %}
+    </nav>
+    <div class="sidebar-footer">
+      <span class="user-badge">👤 {{ user.login }}</span>
+      <button class="btn btn-sm btn-ghost" onclick="logout()">Logout</button>
+    </div>
+  </aside>
+
+  <main class="chat-main">
+    <div class="chat-header">
+      <h2 id="chat-title">{{ chat.title }}</h2>
+    </div>
+
+    <div class="messages" id="messages">
+      {% for msg in chat.messages %}
+      <div class="message {{ msg.role }}">
+        <div class="bubble">{{ msg.content }}</div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="input-area">
+      <textarea id="user-input" placeholder="Ask anything…" rows="1" onkeydown="handleKey(event)"></textarea>
+      <button id="send-btn" class="btn btn-primary" onclick="sendMessage()">Send</button>
+    </div>
+  </main>
+</div>
+
+<script>
+const chatId = {{ chat.id }};
+let isStreaming = false;
+
+function scrollToBottom() {
+  const el = document.getElementById('messages');
+  el.scrollTop = el.scrollHeight;
+}
+scrollToBottom();
+
+function appendMessage(role, content) {
+  const div = document.createElement('div');
+  div.className = 'message ' + role;
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.textContent = content;
+  div.appendChild(bubble);
+  document.getElementById('messages').appendChild(div);
+  scrollToBottom();
+  return bubble;
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+}
+
+async function sendMessage() {
+  if (isStreaming) return;
+  const input = document.getElementById('user-input');
+  const content = input.value.trim();
+  if (!content) return;
+
+  input.value = '';
+  input.style.height = 'auto';
+  appendMessage('user', content);
+
+  isStreaming = true;
+  document.getElementById('send-btn').disabled = true;
+
+  // Streaming via SSE
+  const bubble = appendMessage('assistant', '▋');
+  const url = `/api/chats/${chatId}/stream?content=` + encodeURIComponent(content);
+  const evtSource = new EventSource(url);
+  let full = '';
+
+  evtSource.onmessage = (e) => {
+    if (e.data === '[DONE]') {
+      evtSource.close();
+      isStreaming = false;
+      document.getElementById('send-btn').disabled = false;
+      if (!full) bubble.textContent = '[No response]';
+      return;
+    }
+    full += e.data;
+    bubble.textContent = full + '▋';
+    scrollToBottom();
+  };
+
+  evtSource.onerror = () => {
+    evtSource.close();
+    isStreaming = false;
+    document.getElementById('send-btn').disabled = false;
+    if (!full) bubble.textContent = '[Error getting response]';
+    else bubble.textContent = full;
+  };
+}
+
+async function createChat() {
+  const res = await fetch('/api/chats', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({title: 'New Chat'})
+  });
+  if (res.ok) {
+    const chat = await res.json();
+    window.location.href = '/chats/' + chat.id;
+  }
+}
+
+async function deleteChat(e, id) {
+  e.preventDefault();
+  e.stopPropagation();
+  if (!confirm('Delete this chat?')) return;
+  await fetch('/api/chats/' + id, {method: 'DELETE'});
+  if (id === chatId) window.location.href = '/chats';
+  else window.location.reload();
+}
+
+async function logout() {
+  await fetch('/auth/logout', {method: 'POST'});
+  window.location.href = '/';
+}
+
+// Auto-resize textarea
+document.getElementById('user-input').addEventListener('input', function() {
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 160) + 'px';
+});
+</script>
+{% endblock %}

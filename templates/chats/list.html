@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}My Chats — WAD Chat{% endblock %}
+{% block body %}
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <span class="logo">💬 WAD Chat</span>
+      <button class="btn btn-sm btn-primary" onclick="createChat()">+ New Chat</button>
+    </div>
+    <nav class="chat-list">
+      {% for chat in chats %}
+      <a href="/chats/{{ chat.id }}" class="chat-item">
+        <span class="chat-title">{{ chat.title }}</span>
+        <span class="chat-date">{{ chat.created_at.strftime('%b %d') }}</span>
+      </a>
+      {% else %}
+      <p class="no-chats">No chats yet. Start one!</p>
+      {% endfor %}
+    </nav>
+    <div class="sidebar-footer">
+      <span class="user-badge">👤 {{ user.login }}</span>
+      <button class="btn btn-sm btn-ghost" onclick="logout()">Logout</button>
+    </div>
+  </aside>
+
+  <main class="main-content welcome">
+    <div class="welcome-msg">
+      <h2>Welcome, {{ user.login }}!</h2>
+      <p>Select a chat on the left or create a new one to start talking to the AI.</p>
+      <button class="btn btn-primary btn-lg" onclick="createChat()">Start a new chat</button>
+    </div>
+  </main>
+</div>
+
+<script>
+async function createChat() {
+  const res = await fetch('/api/chats', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({title: 'New Chat'})
+  });
+  if (res.ok) {
+    const chat = await res.json();
+    window.location.href = '/chats/' + chat.id;
+  }
+}
+
+async function logout() {
+  await fetch('/auth/logout', {method: 'POST'});
+  window.location.href = '/';
+}
+</script>
+{% endblock %}

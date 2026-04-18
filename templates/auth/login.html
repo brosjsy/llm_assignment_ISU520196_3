@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Login — WAD Chat{% endblock %}
+{% block body %}
+<div class="auth-page">
+  <div class="auth-card">
+    <h1 class="auth-logo">💬 WAD Chat</h1>
+    <p class="auth-sub">LLM-powered conversations</p>
+
+    <div class="tabs">
+      <button class="tab active" onclick="showTab('login')">Login</button>
+      <button class="tab" onclick="showTab('register')">Register</button>
+    </div>
+
+    <!-- Login Form -->
+    <div id="login-tab">
+      <div id="login-error" class="error-msg hidden"></div>
+      <div class="form-group">
+        <label>Username</label>
+        <input id="login-username" type="text" placeholder="your_username" />
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input id="login-password" type="password" placeholder="••••••••" />
+      </div>
+      <button class="btn btn-primary" onclick="doLogin()">Sign in</button>
+      <div class="divider">or</div>
+      <a href="/auth/github" class="btn btn-github">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+        Continue with GitHub
+      </a>
+    </div>
+
+    <!-- Register Form -->
+    <div id="register-tab" class="hidden">
+      <div id="register-error" class="error-msg hidden"></div>
+      <div class="form-group">
+        <label>Username</label>
+        <input id="reg-username" type="text" placeholder="choose_a_username" />
+      </div>
+      <div class="form-group">
+        <label>Email (optional)</label>
+        <input id="reg-email" type="email" placeholder="you@example.com" />
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input id="reg-password" type="password" placeholder="••••••••" />
+      </div>
+      <button class="btn btn-primary" onclick="doRegister()">Create account</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function showTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('login-tab').classList.add('hidden');
+  document.getElementById('register-tab').classList.add('hidden');
+  document.getElementById(tab + '-tab').classList.remove('hidden');
+  event.target.classList.add('active');
+}
+
+async function doLogin() {
+  const login = document.getElementById('login-username').value;
+  const password = document.getElementById('login-password').value;
+  const err = document.getElementById('login-error');
+  err.classList.add('hidden');
+  const res = await fetch('/auth/login', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({login, password})
+  });
+  if (res.ok) { window.location.href = '/chats'; }
+  else {
+    const data = await res.json();
+    err.textContent = data.detail || 'Login failed';
+    err.classList.remove('hidden');
+  }
+}
+
+async function doRegister() {
+  const login = document.getElementById('reg-username').value;
+  const email = document.getElementById('reg-email').value || null;
+  const password = document.getElementById('reg-password').value;
+  const err = document.getElementById('register-error');
+  err.classList.add('hidden');
+  const res = await fetch('/auth/register', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({login, password, email})
+  });
+  if (res.ok) { window.location.href = '/chats'; }
+  else {
+    const data = await res.json();
+    err.textContent = data.detail || 'Registration failed';
+    err.classList.remove('hidden');
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    if (!document.getElementById('login-tab').classList.contains('hidden')) doLogin();
+    else doRegister();
+  }
+});
+</script>
+{% endblock %}
