@@ -53,4 +53,4 @@ The project uses **PostgreSQL** with the following relational structure:
 3. **Modern Styling**: A dark-themed, glassmorphic UI designed for a premium user experience.
 
 ---
-*Report generated for WAD Homework Project Submission - 2026*
+
