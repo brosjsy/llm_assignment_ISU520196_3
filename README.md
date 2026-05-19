@@ -1,3 +1,12 @@
+
+
+
+
+<img width="1366" height="763" alt="image" src="https://github.com/user-attachments/assets/e5c1f486-d384-46c4-88e7-7d61ed5ee09f" />
+<img width="1363" height="766" alt="image" src="https://github.com/user-attachments/assets/4dcbf48a-bc51-4ec6-be17-8d6142f4e5c4" />
+<img width="1366" height="764" alt="image" src="https://github.com/user-attachments/assets/8e6e19a0-bc4a-4e77-9766-d2f8a37f4dfe" />
+<img width="1365" height="734" alt="image" src="https://github.com/user-attachments/assets/43ddbe44-6c2e-483d-be17-257c44f9ab1a" />
+<img width="1365" height="766" alt="image" src="https://github.com/user-attachments/assets/b000aaa3-02e6-4385-9aba-ec3956d64e95" />
 # WAD Chat — LLM Chat Application
 
 A ChatGPT-like chat application built with **FastAPI**, **PostgreSQL**, **Redis**, **JWT** auth, **GitHub OAuth**, and a **local GGUF LLM** (via `llama-cpp-python`).
