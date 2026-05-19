@@ -1,115 +1,132 @@
-# WAD Chat — Homework Project
+# WAD Chat — LLM Chat Application
 
-A ChatGPT-like LLM chat application built with **FastAPI**, **PostgreSQL**, **Redis**, **JWT auth**, **GitHub OAuth**, and a local **llama-cpp** model.
+A ChatGPT-like chat application built with **FastAPI**, **PostgreSQL**, **Redis**, **JWT** auth, **GitHub OAuth**, and a **local GGUF LLM** (via `llama-cpp-python`).
 
 ---
 
 ## Architecture
 
-This project uses **MVC (Model–View–Controller)** with **server-rendered HTML** (Jinja2 templates).
+**UI mode:** Server-rendered HTML (Jinja2 templates)  
+**Pattern:** MVC — Models · Views (templates) · Controllers (routers call one service method each)
 
-| Layer | Location | Role |
-|-------|----------|------|
-| **Models** | `app/users/models.py`, `app/chats/models.py` | SQLAlchemy ORM tables |
-| **Views** | `templates/` | Jinja2 HTML templates |
-| **Controllers** | `app/auth/router.py`, `app/chats/router.py` | FastAPI route handlers |
-| **Services** | `app/auth/service.py`, `app/chats/service.py` | Business logic |
+```
+app/
+├── auth/
+│   ├── depends.py      # FastAPI dependency — extract user from JWT
+│   ├── router.py       # Controllers (thin — one svc call per endpoint)
+│   ├── schemas.py      # Pydantic request/response models
+│   ├── security.py     # JWT creation/verification, password hashing
+│   └── service.py      # All auth logic: register, login, refresh, GitHub OAuth
+├── chats/
+│   ├── models.py       # SQLAlchemy ORM: Chat, Message
+│   ├── router.py       # Controllers (thin — one svc call per endpoint)
+│   ├── schemas.py      # Pydantic request/response models
+│   └── service.py      # Chat CRUD + LLM orchestration (ask, ask_stream)
+├── llm/
+│   └── service.py      # LLMService: wraps llama-cpp-python, build_prompt
+├── users/
+│   └── models.py       # SQLAlchemy ORM: User
+├── config.py           # Pydantic Settings (reads .env)
+├── database.py         # Async SQLAlchemy engine + session factory
+├── main.py             # FastAPI app, router registration
+└── redis_client.py     # Shared async Redis client
+templates/              # Jinja2 HTML views (base, auth/login, chats/list, chats/detail)
+static/css/style.css    # Dark-theme UI
+alembic/                # DB migration scripts
+```
 
----
-
-## Stack
-
-- **Python 3.11+** / **FastAPI** — async REST + server-rendered views
-- **PostgreSQL** — primary database (via SQLAlchemy async + asyncpg)
-- **Alembic** — database migrations
-- **Redis** — refresh token sessions (TTL 30 days) + chat message cache (TTL 5 min)
-- **JWT** — access + refresh token flow (python-jose)
-- **bcrypt** — password hashing (passlib)
-- **GitHub OAuth** — social login
-- **llama-cpp-python** — local GGUF LLM inference with SSE streaming
+**JWT + Redis flow:**
+- On login/register/GitHub OAuth → access token (30 min) + refresh token (30 days) issued.
+- Refresh token `session_id` is stored in Redis with a 30-day TTL.
+- Refresh endpoint validates the Redis entry and rotates the session (deletes old, creates new).
+- Logout deletes the Redis key, invalidating the session server-side immediately.
 
 ---
 
 ## Prerequisites
 
 - Python 3.11+
-- Docker & Docker Compose (for Postgres + Redis)
-- A GGUF model file (e.g. `tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf`)
-- A GitHub OAuth App (for social login)
+- Docker & Docker Compose (for PostgreSQL + Redis)
+- A GGUF model file (e.g. `qwen.gguf`) — place it in the project root
+- A GitHub OAuth App (for GitHub login)
 
 ---
 
 ## Quick Start
 
-### 1. Clone / set up the repo
+### 1. Clone & enter the project
 
 ```bash
-git clone https://github.com/<your-username>/wad-homework.git
-cd wad-homework
+git clone https://github.com/brosjsy/llm_assignment_ISU520196_3.git
+cd llm_assignment_ISU520196_3
 ```
 
-### 2. Create and activate a virtual environment
+### 2. Start PostgreSQL and Redis
 
 ```bash
-python -m venv .venv
+docker-compose up -d
+```
 
-# macOS / Linux:
-source .venv/bin/activate
+### 3. Create and activate a virtual environment
 
+```bash
+python -m venv venv
 # Windows:
-.venv\Scripts\activate
+venv\Scripts\activate
+# macOS/Linux:
+source venv/bin/activate
 ```
 
-### 3. Install dependencies
+### 4. Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-> **Note:** `llama-cpp-python` may need a C++ compiler. On Ubuntu: `sudo apt install build-essential`. On macOS it works with Xcode CLT.
+> **Note on `llama-cpp-python` on Windows:** if `pip install` fails, use the pre-built CPU wheel:
+> ```bash
+> pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+> ```
 
-### 4. Configure environment variables
+### 5. Place the GGUF model
+
+Copy your model file to the project root:
+
+```bash
+cp /path/to/your/model.gguf ./model.gguf
+```
+
+Or point `MODEL_PATH` in `.env` to any path (e.g. `MODEL_PATH=qwen.gguf`).
+
+### 6. Configure environment variables
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env`:
+Edit `.env` and fill in your values:
 
-```
+```env
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/wad_chat
 REDIS_URL=redis://localhost:6379
-SECRET_KEY=your-very-secret-key-here
-GITHUB_CLIENT_ID=<from GitHub OAuth App>
-GITHUB_CLIENT_SECRET=<from GitHub OAuth App>
+SECRET_KEY=your-very-secret-key-change-me
+GITHUB_CLIENT_ID=your_github_client_id
+GITHUB_CLIENT_SECRET=your_github_client_secret
 GITHUB_REDIRECT_URI=http://localhost:8000/auth/github/callback
 MODEL_PATH=model.gguf
 ```
 
-### 5. Start Postgres and Redis
+**GitHub OAuth App setup:**
+1. Go to https://github.com/settings/developers → **New OAuth App**
+2. Homepage URL: `http://localhost:8000`
+3. Authorization callback URL: `http://localhost:8000/auth/github/callback`
+4. Copy **Client ID** and **Client Secret** into `.env`
 
-```bash
-docker compose up -d
-```
-
-### 6. Run database migrations
+### 7. Run database migrations
 
 ```bash
 alembic upgrade head
 ```
-
-### 7. Place your LLM model file
-
-Download a GGUF model (e.g. TinyLlama or Mistral Q4) and place it in the project root:
-
-```bash
-# Example — download TinyLlama (637 MB):
-wget https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf -O model.gguf
-```
-
-Set `MODEL_PATH=model.gguf` in `.env`.
-
-> **Note:** The app works without a model — it returns a placeholder message. You can test all other features (auth, chats, Redis, DB) without a GGUF file.
 
 ### 8. Start the application
 
@@ -117,207 +134,50 @@ Set `MODEL_PATH=model.gguf` in `.env`.
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Open your browser at **http://localhost:8000**
+Open **http://localhost:8000** in your browser.
 
 ---
 
-## GitHub OAuth Setup
+## API Endpoints
 
-1. Go to https://github.com/settings/developers → **OAuth Apps** → **New OAuth App**
-2. Set:
-   - **Homepage URL:** `http://localhost:8000`
-   - **Authorization callback URL:** `http://localhost:8000/auth/github/callback`
-3. Copy **Client ID** and **Client Secret** into `.env`
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `POST` | `/auth/register` | — | Register with login + password |
+| `POST` | `/auth/login` | — | Login, receive JWT pair in cookies |
+| `POST` | `/auth/refresh` | — | Rotate refresh token |
+| `POST` | `/auth/logout` | JWT | Invalidate session in Redis |
+| `GET` | `/auth/github` | — | Redirect to GitHub OAuth |
+| `GET` | `/auth/github/callback` | — | GitHub OAuth callback handler |
+| `GET` | `/api/chats` | JWT | List all chats for the current user |
+| `POST` | `/api/chats` | JWT | Create a new chat |
+| `GET` | `/api/chats/{id}` | JWT | Get a chat with its messages |
+| `DELETE` | `/api/chats/{id}` | JWT | Delete a chat |
+| `POST` | `/api/chats/{id}/ask` | JWT | Send a message, get LLM reply |
+| `GET` | `/api/chats/{id}/stream?content=…` | JWT | SSE streaming LLM reply |
 
----
-
-## API Overview
-
-All API endpoints are prefixed with `/api` and return JSON. Protected routes require a JWT either in the `Authorization: Bearer <token>` header or in the `access_token` cookie.
-
-### Auth (`/auth`)
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/auth/register` | Register with login + password |
-| POST | `/auth/login` | Login, receive access + refresh tokens |
-| POST | `/auth/refresh` | Refresh access token |
-| POST | `/auth/logout` | Invalidate session (deletes Redis key) |
-| GET | `/auth/github` | Redirect to GitHub OAuth |
-| GET | `/auth/github/callback` | GitHub OAuth callback |
-
-### Chats (`/api/chats`)
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/chats` | List user's chats |
-| POST | `/api/chats` | Create a new chat |
-| GET | `/api/chats/{id}` | Get chat with messages |
-| DELETE | `/api/chats/{id}` | Delete a chat |
-| POST | `/api/chats/{id}/ask` | Send a message, get LLM response (non-streaming) |
-| GET | `/api/chats/{id}/stream?content=...` | SSE streaming LLM response |
-
-### Interactive Docs
-
-Available at **http://localhost:8000/docs** (Swagger UI) when the server is running.
+Interactive API docs (Swagger UI): **http://localhost:8000/docs**
 
 ---
 
-## Database Schema
+## Environment Variables Reference
 
-```
-users
-├── id (PK)
-├── login (unique, not null)
-├── email (nullable)
-├── hashed_password (nullable — null for GitHub-only users)
-├── github_id (unique, nullable)
-├── is_active
-└── created_at
-
-chats
-├── id (PK)
-├── title
-├── user_id (FK → users.id)
-└── created_at
-
-messages
-├── id (PK)
-├── chat_id (FK → chats.id)
-├── role  ("user" | "assistant")
-├── content
-└── created_at
-```
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DATABASE_URL` | `postgresql+asyncpg://postgres:postgres@localhost:5432/wad_chat` | Async PostgreSQL URL |
+| `REDIS_URL` | `redis://localhost:6379` | Redis URL |
+| `SECRET_KEY` | `changeme-secret` | JWT signing key — **change in production** |
+| `ALGORITHM` | `HS256` | JWT algorithm |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | `30` | Access token lifetime (minutes) |
+| `REFRESH_TOKEN_EXPIRE_DAYS` | `30` | Refresh token lifetime / Redis TTL (days) |
+| `GITHUB_CLIENT_ID` | — | GitHub OAuth App client ID |
+| `GITHUB_CLIENT_SECRET` | — | GitHub OAuth App client secret |
+| `GITHUB_REDIRECT_URI` | `http://localhost:8000/auth/github/callback` | Must match GitHub App settings |
+| `MODEL_PATH` | `model.gguf` | Relative or absolute path to GGUF model file |
 
 ---
 
-## JWT + Refresh Token + Redis Flow
+## Bonus Features Implemented
 
-1. On login/register, the server issues:
-   - **Access token** (30 min TTL) — sent as cookie + JSON response
-   - **Refresh token** (30 days TTL) — sent as httpOnly cookie
-2. Refresh token session stored in Redis as `refresh:<session_uuid>` → `user_id`
-3. On `/auth/refresh`, the old Redis key is deleted and new tokens are issued (rotation)
-4. On `/auth/logout`, the Redis key is deleted immediately
-
----
-
-## Project Structure
-
-```
-wad-homework/
-├── app/
-│   ├── auth/
-│   │   ├── depends.py      # get_current_user FastAPI dependency
-│   │   ├── router.py       # auth endpoints + GitHub OAuth
-│   │   ├── schemas.py      # Pydantic request/response models
-│   │   ├── security.py     # JWT, bcrypt helpers
-│   │   └── service.py      # register, login, refresh business logic
-│   ├── chats/
-│   │   ├── models.py       # Chat, Message ORM models
-│   │   ├── router.py       # HTML views + REST API endpoints
-│   │   ├── schemas.py      # Pydantic schemas
-│   │   └── service.py      # CRUD + Redis cache logic
-│   ├── llm/
-│   │   └── service.py      # llama-cpp wrapper, streaming generator
-│   ├── users/
-│   │   └── models.py       # User ORM model
-│   ├── config.py           # pydantic-settings config
-│   ├── database.py         # async SQLAlchemy engine + session
-│   ├── main.py             # FastAPI app, router registration
-│   └── redis_client.py     # Redis async client
-├── alembic/
-│   ├── versions/
-│   │   └── 0001_initial.py # Initial migration (users, chats, messages)
-│   ├── env.py
-│   └── script.py.mako
-├── templates/
-│   ├── base.html
-│   ├── auth/login.html
-│   └── chats/
-│       ├── list.html
-│       └── detail.html
-├── static/css/style.css
-├── alembic.ini
-├── docker-compose.yml
-├── requirements.txt
-├── .env.example
-└── .gitignore
-```
-
----
-
-## Uploading to GitHub (Step-by-Step)
-
-### Step 1 — Create a new GitHub repository
-
-Go to https://github.com/new and create a **new empty repository** (do NOT add README or .gitignore on GitHub).
-
-### Step 2 — Initialize git locally
-
-Run these commands in your project folder:
-
-```bash
-cd wad-homework
-
-git init
-git add .
-git commit -m "Initial commit: WAD homework — FastAPI LLM chat app"
-```
-
-### Step 3 — Connect to GitHub and push
-
-```bash
-git remote add origin https://github.com/<your-username>/<repo-name>.git
-git branch -M main
-git push -u origin main
-```
-
-### Step 4 — Verify
-
-Visit `https://github.com/<your-username>/<repo-name>` — all files should be visible.
-
-### Step 5 — Share with professor
-
-Send the professor the link: `https://github.com/<your-username>/<repo-name>`
-
----
-
-## All Commands — Complete Reference
-
-```bash
-# ── Environment ──────────────────────────────────────
-python -m venv .venv
-source .venv/bin/activate          # Linux/macOS
-.venv\Scripts\activate             # Windows
-
-pip install -r requirements.txt
-
-cp .env.example .env               # then edit .env
-
-# ── Services ─────────────────────────────────────────
-docker compose up -d               # start Postgres + Redis
-docker compose down                # stop services
-docker compose logs -f             # view service logs
-
-# ── Database ─────────────────────────────────────────
-alembic upgrade head               # apply all migrations
-alembic downgrade base             # roll back all migrations
-alembic revision --autogenerate -m "description"  # create new migration
-
-# ── Run App ──────────────────────────────────────────
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-
-# ── Git / GitHub ─────────────────────────────────────
-git init
-git add .
-git commit -m "Initial commit"
-git remote add origin https://github.com/<user>/<repo>.git
-git branch -M main
-git push -u origin main
-
-# Subsequent updates:
-git add .
-git commit -m "Your message"
-git push
-```
+- **Streaming LLM output** — tokens arrive incrementally via SSE; the UI renders them live with a blinking cursor (`▋`)
+- **Chat history caching** — message lists cached in Redis for 5 minutes, invalidated on new message or chat deletion
+- **Auto-title** — the first user message (up to 40 chars) becomes the chat title automatically
